@@ -1,16 +1,11 @@
 package main
 
 import (
-	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"strings"
-	"testing"
 )
-
-func TestValidity(t *testing.T) {
-}
 
 func main() {
 	cst := httptest.NewServer(http.HandlerFunc(authenticate))
@@ -25,9 +20,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	location, _ := ioutil.ReadAll(res.Body)
+        blob, _ := httputil.DumpResponse(res, true)
 	res.Body.Close()
-	println(string(location))
+	println(string(blob))
 }
 
 type credentials struct {
@@ -35,14 +30,9 @@ type credentials struct {
 }
 
 func authenticate(rw http.ResponseWriter, req *http.Request) {
-	dec := json.NewDecoder(req.Body)
-	defer req.Body.Close()
-	creds := new(credentials)
-	if err := dec.Decode(creds); err != nil {
-		http.Error(rw, "could not parse out the response", http.StatusBadRequest)
-	}
-	if creds.Secret != "open-sesame" {
-		http.Error(rw, "unauthorized", http.StatusUnauthorized)
+	secret := req.Header.Get("x-secret")
+	if secret != "open-sesame" {
+		http.Error(rw, "unauthorized, please set header", http.StatusUnauthorized)
 	}
 	rw.Write([]byte(`{"secret_location":"23.4162° N, 25.6628° E"}`))
 }
