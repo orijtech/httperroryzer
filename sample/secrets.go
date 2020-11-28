@@ -20,7 +20,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-        blob, _ := httputil.DumpResponse(res, true)
+	blob, _ := httputil.DumpResponse(res, true)
 	res.Body.Close()
 	println(string(blob))
 }

@@ -43,7 +43,7 @@ This checker helps uncover latent nil dereference bugs, or security problems by 
 diagnostic for such mistakes.`
 
 var Analyzer = &analysis.Analyzer{
-	Name: "httperrormissingreturn",
+	Name: "httperroryzer",
 	Doc:  Doc,
 	Run:  run,
 	Requires: []*analysis.Analyzer{
