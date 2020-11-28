@@ -39,7 +39,7 @@ return after a call to http.Error
     // Code that assumes the error was properly handled.
     slurp, _ := ioutil.ReadAll(res.Body)
 
-This checker helps uncover latent nil dereference bugs by reporting a
+This checker helps uncover latent nil dereference bugs, or security problems by reporting a
 diagnostic for such mistakes.`
 
 var Analyzer = &analysis.Analyzer{
@@ -88,22 +88,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		// Let's inspect its control flow graph.
 		acfg := cfgs.FuncDecl(fnDecl)
 
-		explorable := make(map[int32]bool)
-		for _, block := range acfg.Blocks {
-			explorable[block.Index] = true
-		}
-		// Partition the graph, by deleting the roots accessible by the
-		// entry block, so that the two roots can never be connected.
-		for _, block := range acfg.Blocks[0].Succs {
-			delete(explorable, block.Index)
-		}
-
-		// Now that the roots are deleted, we can build the incidence graph with no more problems.
-		partitionedButConnectedBlocks := make(incidence)
-		for _, block := range acfg.Blocks[0].Succs {
-			buildIncidence(block, explorable, partitionedButConnectedBlocks)
-		}
-
 		for _, block := range acfg.Blocks {
 			if retStmt := block.Return(); retStmt != nil {
 				continue
@@ -129,7 +113,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 					ident = t.Fun.(*ast.Ident)
 				}
 
-				if ident != nil && identMatches(pass, ident, "http.Error") {
+				if ident != nil && identMatches(pass, ident, responseWriterRepliers...) {
 					firstHTTPErrorIndex = i
 					break
 				}
@@ -140,6 +124,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				continue
 			}
 
+			var succs []*cfg.Block
 			tillEndOfBlock := block.Nodes[firstHTTPErrorIndex+1:]
 			// First attempt is to try to find any terminating statements in the same block as the
 			// http.Error statement, for example:
@@ -155,38 +140,29 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				}
 			}
 
-			// The last attempt is to find partitioned but connected blocks that
-			// might have return statements or terminating statements in them.
-			// In this case, let's retrieve all the block indices accessible after we fall through
-			// this block or in the next/larger scope e.g.
-			// if errors.Is(err, os.ErrNotExist) {
-			// 	http.NotFound(rw, req)
-			// } else {
-			// 	http.Error(rw, "cannot load archive", 500)
-			// }
-			// return
+			// Check if the successors don't have terminating statements.
+			succs = append(succs, block.Succs...)
+			for len(succs) > 0 {
+				succ := succs[0]
+				succs = succs[1:]
 
-			for _, index := range partitionedButConnectedBlocks[block.Index] {
-				// Does the block have a return statement.
-				blocksToExplore := []*cfg.Block{acfg.Blocks[index]}
-				if false {
-					for _, subIndex := range partitionedButConnectedBlocks[index] {
-						blocksToExplore = append(blocksToExplore, acfg.Blocks[subIndex])
-					}
-				}
-				for _, cBlock := range blocksToExplore {
-					if cBlock.Return() != nil {
+				for _, node := range succ.Nodes {
+					switch node.(type) {
+					case *ast.ReturnStmt:
 						goto done
-					}
-					// Now check if any of the nodes in there have terminating statements.
-					for _, node := range cBlock.Nodes {
+					case *ast.DeferStmt:
+						continue
+					default:
 						if isTerminatingStmt(pass, node) {
 							goto done
 						}
+						goto failed
 					}
 				}
+				succs = append(succs, succ.Succs...)
 			}
 
+		failed:
 			// We did not find a terminating statement in this block.
 			pass.ReportRangef(block.Nodes[firstHTTPErrorIndex], "call to http.Error without a terminating statement below it")
 		done:
@@ -194,6 +170,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	})
 	return nil, nil
 }
+
+var responseWriterRepliers = []string{"http.Error", "http.NotFound"}
 
 // Check that the function arguments contain:
 //      http.ResponseWriter
@@ -206,19 +184,6 @@ func responseWriterInParams(pass *analysis.Pass, fnDecl *ast.FuncDecl) bool {
 		}
 	}
 	return false
-}
-
-type incidence map[int32][]int32
-
-// buildIncidence traverses a block's successive neighbors, using explorable as a guide
-// for a well partitioned directed graph.
-func buildIncidence(discover *cfg.Block, explorable map[int32]bool, ind incidence) {
-	for _, succ := range discover.Succs {
-		if explorable[succ.Index] {
-			ind[discover.Index] = append(ind[discover.Index], succ.Index)
-			buildIncidence(succ, explorable, ind)
-		}
-	}
 }
 
 func isTerminatingStmt(pass *analysis.Pass, n ast.Node) bool {

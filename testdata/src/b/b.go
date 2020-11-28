@@ -14,7 +14,7 @@ func proxyHandleWithoutReturn(rw http.ResponseWriter, req *http.Request) {
 			fmt.Fprintf(os.Stderr, "go proxy: no archive: %v\n", err)
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			http.NotFound(rw, req)
+			http.NotFound(rw, req) // want "call to http.Error without a terminating statement below it"
 		} else {
 			http.Error(rw, "cannot load archive", 500) // want "call to http.Error without a terminating statement below it"
 		}
@@ -40,7 +40,7 @@ func proxyHandleWithReturn(rw http.ResponseWriter, req *http.Request) {
 			fmt.Fprintf(os.Stderr, "go proxy: no archive: %v\n", err)
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			http.NotFound(rw, req)
+			http.NotFound(rw, req) // want "call to http.Error without a terminating statement below it"
 		} else {
 			http.Error(rw, "cannot load archive", 500) // want "call to http.Error without a terminating.+"
 		}
@@ -58,6 +58,41 @@ func proxyHandleWithReturn(rw http.ResponseWriter, req *http.Request) {
 	switch ext {
 	case "zip":
 		rw.Write([]byte("Zip here"))
+	}
+}
+
+func notFoundReplier(rw http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("failalways") != "" {
+		http.NotFound(rw, req) // want "call to http.Error without a terminating.+"
+	}
+	rw.Write([]byte("FOO"))
+}
+
+func notFoundReplierWithReturn(rw http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("failalways") != "" {
+		http.NotFound(rw, req)
+		return
+	}
+	rw.Write([]byte("FOO"))
+}
+
+func foo(rw http.ResponseWriter, req *http.Request) {
+	http.Error(rw, "msg", 404)
+}
+
+func notFoundReplierWithoutReturn(rw http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("failalways") != "" {
+		http.NotFound(rw, req)
+	}
+}
+
+func notFoundReplierWithBranch(rw http.ResponseWriter, req *http.Request) {
+	if req.Header.Get("failalways") != "" {
+		rw.WriteHeader(200)
+		http.NotFound(rw, req)
+		rw.Write([]byte("fizz buzz"))
+	} else {
+		http.Error(rw, "ditto", http.StatusBadRequest)
 	}
 }
 
