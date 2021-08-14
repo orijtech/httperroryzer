@@ -1,4 +1,8 @@
 # httperroryzer
+
+![Build status](https://github.com/orijtech/httperroryzer/actions/workflows/ci.yml/badge.svg?branch=main)
+[![Go Reference](https://pkg.go.dev/badge/github.com/orijtech/httperroryzer.svg)](https://pkg.go.dev/github.com/orijtech/httperroryzer)
+
 Static analyzer to catch invalid uses of http.Error without a return statement which can cause expected bugs
 
 ## Example
