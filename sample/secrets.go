@@ -25,14 +25,10 @@ func main() {
 	println(string(blob))
 }
 
-type credentials struct {
-	Secret string `json:"secret"`
-}
-
 func authenticate(rw http.ResponseWriter, req *http.Request) {
 	secret := req.Header.Get("x-secret")
 	if secret != "open-sesame" {
 		http.Error(rw, "unauthorized, please set header", http.StatusUnauthorized)
 	}
-	rw.Write([]byte(`{"secret_location":"23.4162° N, 25.6628° E"}`))
+	_, _ = rw.Write([]byte(`{"secret_location":"23.4162° N, 25.6628° E"}`))
 }
